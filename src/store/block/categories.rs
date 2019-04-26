@@ -39,7 +39,7 @@ impl Block for CategoryBlock {
         ));
       }
 
-      let name_parts: Vec<&str> = name.split("\u{16}\u{2}").collect();
+      let name_parts: Vec<_> = name.split("\u{16}\u{2}").collect();
 
       pos += 4 + len + 1;
       category_map.insert(
