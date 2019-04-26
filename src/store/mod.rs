@@ -13,30 +13,30 @@ pub struct Store {
   //pub block0: Block0,
   //pub blocks: Vec<Block>,
   pub properties: HashMap<u32, Property>,
-  //pub categories: HashMap<u32, String>,
+  pub categories: HashMap<u32, Category>,
 }
 
 impl Store {
   pub fn read_from(reader: &mut (impl Read + Seek)) -> Result<Self, Error> {
     let header = Header::read_from(reader)?;
 
-    let property_blocks: Vec<PropertyBlock> = Self::parse_blocks(reader, &header)?;
+    let property_blocks: Vec<PropertyBlock> = Self::parse_blocks(reader, header.property_index)?;
     let properties: PropertyBlock = property_blocks.into_iter().collect();
+
+    let category_blocks: Vec<CategoryBlock> = Self::parse_blocks(reader, header.category_index)?;
+    let categories: CategoryBlock = category_blocks.into_iter().collect();
 
     Ok(Store {
       header,
       properties: properties.data,
+      categories: categories.data,
     })
   }
 
-  fn parse_blocks<T: Block>(
-    reader: &mut (impl Read + Seek),
-    header: &Header,
-  ) -> Result<Vec<T>, Error> {
-    let property_block_metas =
-      Meta::read_chain(reader, Some(T::BLOCK_TYPE), header.property_index)?;
+  fn parse_blocks<T: Block>(reader: &mut (impl Read + Seek), offset: u32) -> Result<Vec<T>, Error> {
+    let property_block_metas = Meta::read_chain(reader, Some(T::BLOCK_TYPE), offset)?;
 
-    reader.seek(SeekFrom::Start(header.property_index as u64 * 4096))?;
+    reader.seek(SeekFrom::Start(offset as u64 * 4096))?;
     property_block_metas
       .into_iter()
       .map(|meta| {
