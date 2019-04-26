@@ -1,4 +1,3 @@
-use byteorder::{ReadBytesExt, LE};
 use std::collections::HashMap;
 use std::io::{Error, Read, Seek, SeekFrom};
 
@@ -14,63 +13,38 @@ pub struct Store {
   //pub block0: Block0,
   //pub blocks: Vec<Block>,
   pub properties: HashMap<u32, Property>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Property {
-  pub name: String,
-  pub value_type: u8,
-  pub prop_type: u8,
+  //pub categories: HashMap<u32, String>,
 }
 
 impl Store {
   pub fn read_from(reader: &mut (impl Read + Seek)) -> Result<Self, Error> {
     let header = Header::read_from(reader)?;
-    let block0 = Block0::read_from(reader)?;
 
-    let property_blocks = Block::read_chain(
-      reader,
-      Some(Type::Property),
-      header.property_index,
-      header.block_size,
-    )?;
-    let properties = Self::parse_properties(property_blocks)?;
+    let property_blocks: Vec<PropertyBlock> = Self::parse_blocks(reader, &header)?;
+    let properties: PropertyBlock = property_blocks.into_iter().collect();
 
-    Ok(Store { header, properties })
+    Ok(Store {
+      header,
+      properties: properties.data,
+    })
   }
 
-  fn parse_properties(blocks: Vec<Block>) -> Result<HashMap<u32, Property>, Error> {
-    let mut property_map: HashMap<u32, Property> = HashMap::new();
+  fn parse_blocks<T: Block>(
+    reader: &mut (impl Read + Seek),
+    header: &Header,
+  ) -> Result<Vec<T>, Error> {
+    let property_block_metas =
+      Meta::read_chain(reader, Some(T::BLOCK_TYPE), header.property_index)?;
 
-    for mut block in blocks {
-      block.data.seek(SeekFrom::Start(32))?;
-
-      while block.data.position() < block.logical_size as u64 {
-        let index = block.data.read_u32::<LE>()?;
-        let value_type = block.data.read_u8()?;
-        let prop_type = block.data.read_u8()?;
-
-        let mut name = String::new();
-
-        while block.data.position() < block.logical_size as u64 {
-          let character = block.data.read_u8()? as char;
-          if character == '\x00' {
-            break;
-          }
-          name.push(character);
-        }
-
-        property_map.insert(
-          index,
-          Property {
-            value_type,
-            prop_type,
-            name,
-          },
-        );
-      }
-    }
-
-    Ok(property_map)
+    reader.seek(SeekFrom::Start(header.property_index as u64 * 4096))?;
+    property_block_metas
+      .into_iter()
+      .map(|meta| {
+        let next_index = meta.next_block_index;
+        let block = T::from_meta(reader, meta)?;
+        reader.seek(SeekFrom::Start(next_index as u64 * 4096))?;
+        Ok(block)
+      })
+      .collect()
   }
 }

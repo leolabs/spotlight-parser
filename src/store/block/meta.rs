@@ -1,5 +1,5 @@
 use byteorder::{ReadBytesExt, LE};
-use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 
 #[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum Type {
@@ -22,9 +22,8 @@ pub struct Block0 {
 }
 
 // TODO Wie kann man die Datengröße auch im Typ festlegen?
-#[derive(Debug, Clone)]
-pub struct Block {
-  pub data: Cursor<Vec<u8>>,
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Meta {
   pub physical_size: u32,
   pub logical_size: u32,
   pub block_type: Option<Type>,
@@ -94,8 +93,8 @@ impl Block0 {
   }
 }
 
-impl Block {
-  pub fn read_from(reader: &mut (impl Read + Seek), block_size: u32) -> Result<Self, Error> {
+impl Meta {
+  pub fn read_from(reader: &mut (impl Read + Seek)) -> Result<Self, Error> {
     if !Self::is_valid_signature(reader)? {
       return Err(Error::new(
         ErrorKind::InvalidData,
@@ -103,20 +102,15 @@ impl Block {
       ));
     }
 
-    println!("Reading block data with block_size {}", block_size);
-    let mut data = Cursor::new(vec![0; block_size as usize]);
-    reader.read_exact(data.get_mut())?;
+    let physical_size = reader.read_u32::<LE>()?;
+    let logical_size = reader.read_u32::<LE>()?;
+    let block_type = Type::read_from(reader)?;
+    reader.seek(SeekFrom::Current(4))?;
+    let next_block_index = reader.read_u32::<LE>()?;
+    reader.seek(SeekFrom::Current(8))?;
+    reader.seek(SeekFrom::Start(0))?;
 
-    let physical_size = data.read_u32::<LE>()?;
-    let logical_size = data.read_u32::<LE>()?;
-    let block_type = Type::read_from(&mut data)?;
-    data.seek(SeekFrom::Current(4))?;
-    let next_block_index = data.read_u32::<LE>()?;
-    data.seek(SeekFrom::Current(8))?;
-    data.seek(SeekFrom::Start(0))?;
-
-    Ok(Block {
-      data,
+    Ok(Meta {
       physical_size,
       logical_size,
       block_type,
@@ -128,13 +122,12 @@ impl Block {
     reader: &mut (impl Read + Seek),
     expected_type: Option<Type>,
     mut index: u32,
-    block_size: u32,
-  ) -> Result<Vec<Block>, Error> {
+  ) -> Result<Vec<Meta>, Error> {
     let mut results = Vec::new();
 
     while index != 0 {
       reader.seek(SeekFrom::Start((index * 4096) as u64))?;
-      let block = Block::read_from(reader, block_size)?;
+      let block = Meta::read_from(reader)?;
 
       if block.block_type != expected_type {
         return Err(Error::new(
