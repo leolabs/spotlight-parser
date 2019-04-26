@@ -1,3 +1,4 @@
+use crate::read_ext::ReadExt;
 use byteorder::{ReadBytesExt, LE};
 use std::collections::HashMap;
 use std::io::{Error, Read, Seek, SeekFrom};
@@ -32,18 +33,9 @@ impl Block for PropertyBlock {
       let index = reader.read_u32::<LE>()?;
       let value_type = reader.read_u8()?;
       let prop_type = reader.read_u8()?;
+      let (name, len) = reader.read_zero_terminated()?;
 
-      let mut name = String::new();
-
-      loop {
-        let character = reader.read_u8()? as char;
-        if character == '\x00' {
-          break;
-        }
-        name.push(character);
-      }
-
-      pos += 6 + name.len() + 1;
+      pos += 6 + len + 1;
 
       property_map.insert(
         index,
