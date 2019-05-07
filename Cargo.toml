@@ -5,4 +5,5 @@ authors = ["Leo Bernard <admin@leolabs.org>"]
 edition = "2018"
 
 [dependencies]
-byteorder="1"
+byteorder = "1"
+notify = "4.0.0"

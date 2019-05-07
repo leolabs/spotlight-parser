@@ -1,15 +1,27 @@
-mod read_ext;
-mod store;
+extern crate notify;
 
-use std::fs::File;
+use notify::{watcher, RecursiveMode, Watcher};
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 fn main() {
-    println!("Hello, world!");
+    // Create a channel to receive the events.
+    let (tx, rx) = channel();
 
-    let mut file = File::open("/Users/leobernard/Desktop/store.db").unwrap();
-    // let header = store::Header::read_from(&mut file);
-    // let block0 = store::Block0::read_from(&mut file);
-    let store = store::Store::read_from(&mut file).unwrap();
+    // Create a watcher object, delivering debounced events.
+    // The notification back-end is selected based on the platform.
+    let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
 
-    println!("{:#?}", store);
+    // Add a path to be watched. All files and directories at that path and
+    // below will be monitored for changes.
+    watcher
+        .watch("/Volumes/", RecursiveMode::NonRecursive)
+        .unwrap();
+
+    loop {
+        match rx.recv() {
+            Ok(event) => println!("{:?}", event),
+            Err(e) => println!("watch error: {:?}", e),
+        }
+    }
 }
